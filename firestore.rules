@@ -1,0 +1,203 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 120)) &&
+             (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 500)) &&
+             (!('deviceName' in data) || (data.deviceName is string && data.deviceName.size() <= 60)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidProject(data) {
+      return data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+             data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 60 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+             data.aspectRatio in ['9:16', '16:9', '1:1', '4:5'] &&
+             data.resolution in ['720p', '1080p', '4K'] &&
+             data.fps is int && data.fps in [24, 30, 60] &&
+             data.inviteCode is string && data.inviteCode.size() >= 6 && data.inviteCode.size() <= 24 &&
+             data.inviteCode.matches('^[a-zA-Z0-9_\\-]+$') &&
+             data.memberUids is list && data.memberUids.size() >= 1 && data.memberUids.size() <= 10 &&
+             data.memberUids[0] is string &&
+             data.activeEditors is list && data.activeEditors.size() <= 10 &&
+             (data.activeEditors.size() == 0 || data.activeEditors[0] is string) &&
+             data.clips is list && data.clips.size() <= 20 &&
+             (data.clips.size() == 0 || data.clips[0] is map) &&
+             data.captions is list && data.captions.size() <= 40 &&
+             (data.captions.size() == 0 || data.captions[0] is map) &&
+             data.textOverlays is list && data.textOverlays.size() <= 20 &&
+             (data.textOverlays.size() == 0 || data.textOverlays[0] is map) &&
+             (!('musicTrack' in data) || data.musicTrack == null || (data.musicTrack is map && data.musicTrack.size() <= 15)) &&
+             (!('globalFilter' in data) || data.globalFilter == null || (data.globalFilter is map && data.globalFilter.size() <= 15)) &&
+             data.totalDurationMs is int && data.totalDurationMs >= 0 && data.totalDurationMs <= 3600000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidActivity(data) {
+      return data.projectId is string && data.projectId.size() >= 1 && data.projectId.size() <= 128 &&
+             data.actorUid is string && data.actorUid.size() >= 1 && data.actorUid.size() <= 128 &&
+             data.actorName is string && data.actorName.size() >= 1 && data.actorName.size() <= 60 &&
+             data.deviceName is string && data.deviceName.size() >= 1 && data.deviceName.size() <= 60 &&
+             data.actionSummary is string && data.actionSummary.size() >= 1 && data.actionSummary.size() <= 160 &&
+             data.memberUids is list && data.memberUids.size() >= 1 && data.memberUids.size() <= 10 &&
+             data.memberUids[0] is string &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidInvite(data) {
+      return data.projectId is string && data.projectId.size() >= 1 && data.projectId.size() <= 128 &&
+             data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+             data.projectTitle is string && data.projectTitle.size() >= 1 && data.projectTitle.size() <= 80 &&
+             data.active is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get, list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'photoUrl', 'deviceName', 'createdAt', 'updatedAt']) &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'photoUrl', 'deviceName', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    match /projects/{projectId} {
+      allow get: if isSignedIn() && isValidId(projectId) && request.auth.uid in existing().memberUids;
+      allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(projectId) &&
+                       incoming().ownerId == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().keys().hasAll([
+                         'ownerId', 'ownerName', 'title', 'aspectRatio', 'resolution', 'fps',
+                         'inviteCode', 'memberUids', 'activeEditors', 'clips', 'captions',
+                         'textOverlays', 'totalDurationMs', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'ownerId', 'ownerName', 'title', 'aspectRatio', 'resolution', 'fps',
+                         'inviteCode', 'memberUids', 'activeEditors', 'clips', 'captions',
+                         'textOverlays', 'musicTrack', 'globalFilter', 'totalDurationMs',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidProject(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(projectId) &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidProject(incoming()) && (
+                         // Action 1: Member edits timeline state
+                         (request.auth.uid in existing().memberUids &&
+                          incoming().memberUids == existing().memberUids &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'title', 'aspectRatio', 'resolution', 'fps', 'inviteCode',
+                            'activeEditors', 'clips', 'captions', 'textOverlays',
+                            'musicTrack', 'globalFilter', 'totalDurationMs', 'updatedAt'
+                          ]) &&
+                          (incoming().inviteCode == existing().inviteCode || request.auth.uid == existing().ownerId)) ||
+                         // Action 2: Owner updates collaborator list
+                         (request.auth.uid == existing().ownerId &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'activeEditors', 'updatedAt']) &&
+                          existing().ownerId in incoming().memberUids) ||
+                         // Action 3: Collaborator joins via active invite document
+                         (!(request.auth.uid in existing().memberUids) &&
+                          exists(/databases/$(database)/documents/project_invites/$(existing().inviteCode)) &&
+                          get(/databases/$(database)/documents/project_invites/$(existing().inviteCode)).data.active == true &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'activeEditors', 'updatedAt']) &&
+                          incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                          incoming().memberUids.hasAll(existing().memberUids) &&
+                          request.auth.uid in incoming().memberUids)
+                       );
+
+      allow delete: if isSignedIn() && isValidId(projectId) && existing().ownerId == request.auth.uid;
+
+      match /activity/{activityId} {
+        allow get: if isSignedIn() && isValidId(activityId) && request.auth.uid in existing().memberUids;
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(activityId) &&
+                         incoming().actorUid == request.auth.uid &&
+                         incoming().projectId == projectId &&
+                         request.auth.uid in incoming().memberUids &&
+                         incoming().keys().hasAll([
+                           'projectId', 'actorUid', 'actorName', 'deviceName',
+                           'actionSummary', 'memberUids', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'projectId', 'actorUid', 'actorName', 'deviceName',
+                           'actionSummary', 'memberUids', 'createdAt'
+                         ]) &&
+                         isValidActivity(incoming()) &&
+                         exists(/databases/$(database)/documents/projects/$(projectId)) &&
+                         request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberUids;
+
+        allow update, delete: if false;
+      }
+    }
+
+    match /project_invites/{inviteCode} {
+      allow get: if isSignedIn() && isValidId(inviteCode);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(inviteCode) &&
+                       incoming().ownerId == request.auth.uid &&
+                       incoming().keys().hasAll(['projectId', 'ownerId', 'projectTitle', 'active', 'createdAt']) &&
+                       incoming().keys().hasOnly(['projectId', 'ownerId', 'projectTitle', 'active', 'createdAt']) &&
+                       isValidInvite(incoming()) &&
+                       exists(/databases/$(database)/documents/projects/$(incoming().projectId)) &&
+                       get(/databases/$(database)/documents/projects/$(incoming().projectId)).data.ownerId == request.auth.uid;
+
+      allow update: if isSignedIn() &&
+                       isValidId(inviteCode) &&
+                       existing().ownerId == request.auth.uid &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().projectId == existing().projectId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidInvite(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['projectTitle', 'active']);
+
+      allow delete: if isSignedIn() && isValidId(inviteCode) && existing().ownerId == request.auth.uid;
+    }
+  }
+}

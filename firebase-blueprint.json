@@ -1,0 +1,94 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile and studio device metadata.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID of the owner." },
+        "displayName": { "type": "string", "description": "Display name shown in collaborative sessions." },
+        "email": { "type": "string", "description": "Private user email." },
+        "photoUrl": { "type": "string", "description": "Google avatar URL." },
+        "deviceName": { "type": "string", "description": "Current device model identifier for multi-device sync." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["userId", "displayName", "createdAt", "updatedAt"]
+    },
+    "VideoProject": {
+      "title": "VideoProject",
+      "description": "Cloud-synced collaborative video editing timeline project.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "description": "Firebase Auth UID of the project creator." },
+        "ownerName": { "type": "string", "description": "Creator display name." },
+        "title": { "type": "string", "description": "Project title." },
+        "aspectRatio": { "type": "string", "enum": ["9:16", "16:9", "1:1", "4:5"], "description": "Canvas aspect ratio." },
+        "resolution": { "type": "string", "enum": ["720p", "1080p", "4K"], "description": "Export resolution preset." },
+        "fps": { "type": "integer", "description": "Frame rate (24, 30, or 60)." },
+        "inviteCode": { "type": "string", "description": "Collaborative invite code for joining across devices/users." },
+        "memberUids": { "type": "array", "description": "Authorized collaborator UIDs (max 10)." },
+        "activeEditors": { "type": "array", "description": "Active collaborator device tags (max 10)." },
+        "clips": { "type": "array", "description": "Ordered video clip timeline segments (max 20)." },
+        "captions": { "type": "array", "description": "Timed auto-caption or subtitle entries (max 40)." },
+        "textOverlays": { "type": "array", "description": "Styled floating title/sticker overlays (max 20)." },
+        "musicTrack": { "type": "object", "description": "Selected soundtrack configuration map." },
+        "globalFilter": { "type": "object", "description": "Active AI-powered or preset color grading filter map." },
+        "totalDurationMs": { "type": "integer", "description": "Computed timeline duration in milliseconds." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": [
+        "ownerId", "ownerName", "title", "aspectRatio", "resolution", "fps",
+        "inviteCode", "memberUids", "activeEditors", "clips", "captions",
+        "textOverlays", "totalDurationMs", "createdAt", "updatedAt"
+      ]
+    },
+    "ProjectActivity": {
+      "title": "ProjectActivity",
+      "description": "Real-time multi-device collaborative edit log entry.",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string", "description": "Parent project ID." },
+        "actorUid": { "type": "string", "description": "UID of the collaborator making the edit." },
+        "actorName": { "type": "string", "description": "Display name of the collaborator." },
+        "deviceName": { "type": "string", "description": "Device model performing the edit." },
+        "actionSummary": { "type": "string", "description": "Human-readable description of the edit." },
+        "memberUids": { "type": "array", "description": "Denormalized member UIDs from parent project." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["projectId", "actorUid", "actorName", "deviceName", "actionSummary", "memberUids", "createdAt"]
+    },
+    "ProjectInvite": {
+      "title": "ProjectInvite",
+      "description": "Lookup token allowing authenticated users with the code to join a collaborative project.",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string", "description": "Target project ID." },
+        "ownerId": { "type": "string", "description": "Project owner UID." },
+        "projectTitle": { "type": "string", "description": "Project title preview." },
+        "active": { "type": "boolean", "description": "Whether the invite is active." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["projectId", "ownerId", "projectTitle", "active", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user studio profile and device sync identity."
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/VideoProject" },
+      "description": "Collaborative cloud-synced video editing timelines."
+    },
+    "/projects/{projectId}/activity/{activityId}": {
+      "schema": { "$ref": "#/entities/ProjectActivity" },
+      "description": "Multi-device edit activity feed for a project."
+    },
+    "/project_invites/{inviteCode}": {
+      "schema": { "$ref": "#/entities/ProjectInvite" },
+      "description": "Invite lookup codes for joining collaborative projects."
+    }
+  }
+}

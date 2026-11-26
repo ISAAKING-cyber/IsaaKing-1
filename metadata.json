@@ -1,0 +1,6 @@
+{
+  "name": "Isaaking Video Editor",
+  "description": "Pro dark-mode mobile video editor with timeline trimming, cinematic transitions, AI-powered filters, auto-captions, music library, and cloud project syncing & collaboration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
